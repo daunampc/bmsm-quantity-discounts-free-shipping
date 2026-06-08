@@ -39,10 +39,7 @@ final class BMSM_QDFS_Plugin {
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
         add_action('woocommerce_cart_calculate_fees', array($this, 'apply_quantity_discount'), 20, 1);
         add_filter('woocommerce_package_rates', array($this, 'control_shipping_rates'), 9999, 2);
-
-        // Single product only: render by PHP after the whole add-to-cart form.
         add_action('woocommerce_after_add_to_cart_form', array($this, 'render_offer_boxes'), 20);
-
         add_action('woocommerce_before_cart', array($this, 'show_notice'));
         add_action('woocommerce_before_checkout_form', array($this, 'show_notice'));
 
@@ -104,12 +101,7 @@ final class BMSM_QDFS_Plugin {
             if ($label === '') {
                 $label = sprintf('Buy %d Save %s%%', $qty, self::format_number($discount));
             }
-            $clean[] = array(
-                'enabled' => isset($tier['enabled']) && $tier['enabled'] === 'yes' ? 'yes' : 'no',
-                'qty' => $qty,
-                'discount' => $discount,
-                'label' => $label,
-            );
+            $clean[] = array('enabled' => isset($tier['enabled']) && $tier['enabled'] === 'yes' ? 'yes' : 'no', 'qty' => $qty, 'discount' => $discount, 'label' => $label);
         }
         usort($clean, function($a, $b) { return (int) $a['qty'] <=> (int) $b['qty']; });
         return $clean;
@@ -129,12 +121,7 @@ final class BMSM_QDFS_Plugin {
             if ($code === '' || $description === '') {
                 continue;
             }
-            $clean[] = array(
-                'enabled' => isset($offer['enabled']) && $offer['enabled'] === 'yes' ? 'yes' : 'no',
-                'code' => $code,
-                'description' => $description,
-                'icon' => isset($offer['icon']) && $offer['icon'] === 'truck' ? 'truck' : 'tag',
-            );
+            $clean[] = array('enabled' => isset($offer['enabled']) && $offer['enabled'] === 'yes' ? 'yes' : 'no', 'code' => $code, 'description' => $description, 'icon' => isset($offer['icon']) && $offer['icon'] === 'truck' ? 'truck' : 'tag');
         }
         return $clean;
     }
@@ -177,24 +164,14 @@ final class BMSM_QDFS_Plugin {
         $tiers = array();
         if (isset($_POST['tiers']) && is_array($_POST['tiers'])) {
             foreach ($_POST['tiers'] as $tier) {
-                $tiers[] = array(
-                    'enabled' => isset($tier['enabled']) ? 'yes' : 'no',
-                    'qty' => isset($tier['qty']) ? absint($tier['qty']) : 0,
-                    'discount' => isset($tier['discount']) ? (float) wc_clean(wp_unslash($tier['discount'])) : 0,
-                    'label' => isset($tier['label']) ? sanitize_text_field(wp_unslash($tier['label'])) : '',
-                );
+                $tiers[] = array('enabled' => isset($tier['enabled']) ? 'yes' : 'no', 'qty' => isset($tier['qty']) ? absint($tier['qty']) : 0, 'discount' => isset($tier['discount']) ? (float) wc_clean(wp_unslash($tier['discount'])) : 0, 'label' => isset($tier['label']) ? sanitize_text_field(wp_unslash($tier['label'])) : '');
             }
         }
 
         $offers = array();
         if (isset($_POST['coupon_offers']) && is_array($_POST['coupon_offers'])) {
             foreach ($_POST['coupon_offers'] as $offer) {
-                $offers[] = array(
-                    'enabled' => isset($offer['enabled']) ? 'yes' : 'no',
-                    'code' => isset($offer['code']) ? sanitize_text_field(wp_unslash($offer['code'])) : '',
-                    'description' => isset($offer['description']) ? sanitize_text_field(wp_unslash($offer['description'])) : '',
-                    'icon' => isset($offer['icon']) && $offer['icon'] === 'truck' ? 'truck' : 'tag',
-                );
+                $offers[] = array('enabled' => isset($offer['enabled']) ? 'yes' : 'no', 'code' => isset($offer['code']) ? sanitize_text_field(wp_unslash($offer['code'])) : '', 'description' => isset($offer['description']) ? sanitize_text_field(wp_unslash($offer['description'])) : '', 'icon' => isset($offer['icon']) && $offer['icon'] === 'truck' ? 'truck' : 'tag');
             }
         }
 
@@ -437,15 +414,7 @@ final class BMSM_QDFS_Plugin {
             return $transient;
         }
         $plugin_file = plugin_basename(__FILE__);
-        $transient->response[$plugin_file] = (object) array(
-            'slug' => dirname($plugin_file),
-            'plugin' => $plugin_file,
-            'new_version' => $latest_version,
-            'url' => 'https://github.com/' . self::GITHUB_OWNER . '/' . self::GITHUB_REPO,
-            'package' => !empty($release['zipball_url']) ? $release['zipball_url'] : '',
-            'tested' => '9.0',
-            'requires_php' => '7.4',
-        );
+        $transient->response[$plugin_file] = (object) array('slug' => dirname($plugin_file), 'plugin' => $plugin_file, 'new_version' => $latest_version, 'url' => 'https://github.com/' . self::GITHUB_OWNER . '/' . self::GITHUB_REPO, 'package' => !empty($release['zipball_url']) ? $release['zipball_url'] : '', 'tested' => '9.0', 'requires_php' => '7.4');
         return $transient;
     }
 
@@ -455,16 +424,7 @@ final class BMSM_QDFS_Plugin {
         }
         $release = $this->get_latest_github_release();
         $version = !empty($release['tag_name']) ? ltrim($release['tag_name'], 'vV') : self::VERSION;
-        return (object) array(
-            'name' => 'BMSM Quantity Discounts + Free Shipping',
-            'slug' => dirname(plugin_basename(__FILE__)),
-            'version' => $version,
-            'author' => '<a href="https://github.com/toshstack">toshstack</a>',
-            'homepage' => 'https://github.com/' . self::GITHUB_OWNER . '/' . self::GITHUB_REPO,
-            'sections' => array('description' => 'WooCommerce quantity discount, free-shipping, and frontend offer box plugin.', 'changelog' => !empty($release['body']) ? wp_kses_post($release['body']) : 'Initial v1.0.0 release.'),
-            'download_link' => !empty($release['zipball_url']) ? $release['zipball_url'] : '',
-            'requires_php' => '7.4',
-        );
+        return (object) array('name' => 'BMSM Quantity Discounts + Free Shipping', 'slug' => dirname(plugin_basename(__FILE__)), 'version' => $version, 'author' => '<a href="https://github.com/toshstack">toshstack</a>', 'homepage' => 'https://github.com/' . self::GITHUB_OWNER . '/' . self::GITHUB_REPO, 'sections' => array('description' => 'WooCommerce quantity discount, free-shipping, and frontend offer box plugin.', 'changelog' => !empty($release['body']) ? wp_kses_post($release['body']) : 'Initial v1.0.0 release.'), 'download_link' => !empty($release['zipball_url']) ? $release['zipball_url'] : '', 'requires_php' => '7.4');
     }
 }
 
@@ -480,6 +440,6 @@ add_action('plugins_loaded', function() {
 
 register_activation_hook(__FILE__, function() {
     if (!get_option(BMSM_QDFS_Plugin::OPTION_KEY)) {
-        update_option(BMSM_QDFS_Plugin::defaults());
+        update_option(BMSM_QDFS_Plugin::OPTION_KEY, BMSM_QDFS_Plugin::defaults());
     }
 });
