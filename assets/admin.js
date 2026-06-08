@@ -1,15 +1,17 @@
 jQuery(function($) {
-    var $table = $('#bmsm-tiers-table tbody');
-    var template = $('#bmsm-tier-row-template').html();
+    function addRow(buttonSelector, tableSelector, templateSelector) {
+        $(buttonSelector).on('click', function(e) {
+            e.preventDefault();
+            var template = $(templateSelector).html();
+            var index = Date.now();
+            $(tableSelector + ' tbody').append(template.replace(/__INDEX__/g, index));
+        });
+    }
 
-    $('#bmsm-add-tier').on('click', function(e) {
-        e.preventDefault();
-        var index = Date.now();
-        var row = template.replace(/__INDEX__/g, index);
-        $table.append(row);
-    });
+    addRow('#bmsm-add-tier', '#bmsm-tiers-table', '#bmsm-tier-row-template');
+    addRow('#bmsm-add-offer', '#bmsm-offers-table', '#bmsm-offer-row-template');
 
-    $(document).on('click', '.bmsm-remove-tier', function(e) {
+    $(document).on('click', '.bmsm-remove-tier, .bmsm-remove-offer', function(e) {
         e.preventDefault();
         $(this).closest('tr').remove();
     });
