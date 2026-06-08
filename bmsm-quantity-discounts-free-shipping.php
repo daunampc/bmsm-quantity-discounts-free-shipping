@@ -39,9 +39,10 @@ final class BMSM_QDFS_Plugin {
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
         add_action('woocommerce_cart_calculate_fees', array($this, 'apply_quantity_discount'), 20, 1);
         add_filter('woocommerce_package_rates', array($this, 'control_shipping_rates'), 9999, 2);
-        add_action('woocommerce_before_add_to_cart_form', array($this, 'render_offer_boxes'));
-        add_action('woocommerce_before_cart', array($this, 'render_offer_boxes'));
-        add_action('woocommerce_before_checkout_form', array($this, 'render_offer_boxes'), 5);
+
+        // Single product only: render by PHP after the whole add-to-cart form.
+        add_action('woocommerce_after_add_to_cart_form', array($this, 'render_offer_boxes'), 20);
+
         add_action('woocommerce_before_cart', array($this, 'show_notice'));
         add_action('woocommerce_before_checkout_form', array($this, 'show_notice'));
 
@@ -95,17 +96,20 @@ final class BMSM_QDFS_Plugin {
                 continue;
             }
             $qty = isset($tier['qty']) ? absint($tier['qty']) : 0;
-            $discount = isset($tier['discount']) ? (float) $tier['discount'] : 0;
+            $discount = isset($tier['discount']) ? min(100, (float) $tier['discount']) : 0;
             $label = isset($tier['label']) ? sanitize_text_field($tier['label']) : '';
-            $enabled = isset($tier['enabled']) && $tier['enabled'] === 'yes' ? 'yes' : 'no';
             if ($qty <= 0 || $discount <= 0) {
                 continue;
             }
-            $discount = min(100, $discount);
             if ($label === '') {
                 $label = sprintf('Buy %d Save %s%%', $qty, self::format_number($discount));
             }
-            $clean[] = array('enabled' => $enabled, 'qty' => $qty, 'discount' => $discount, 'label' => $label);
+            $clean[] = array(
+                'enabled' => isset($tier['enabled']) && $tier['enabled'] === 'yes' ? 'yes' : 'no',
+                'qty' => $qty,
+                'discount' => $discount,
+                'label' => $label,
+            );
         }
         usort($clean, function($a, $b) { return (int) $a['qty'] <=> (int) $b['qty']; });
         return $clean;
@@ -125,9 +129,12 @@ final class BMSM_QDFS_Plugin {
             if ($code === '' || $description === '') {
                 continue;
             }
-            $icon = isset($offer['icon']) && $offer['icon'] === 'truck' ? 'truck' : 'tag';
-            $enabled = isset($offer['enabled']) && $offer['enabled'] === 'yes' ? 'yes' : 'no';
-            $clean[] = array('enabled' => $enabled, 'code' => $code, 'description' => $description, 'icon' => $icon);
+            $clean[] = array(
+                'enabled' => isset($offer['enabled']) && $offer['enabled'] === 'yes' ? 'yes' : 'no',
+                'code' => $code,
+                'description' => $description,
+                'icon' => isset($offer['icon']) && $offer['icon'] === 'truck' ? 'truck' : 'tag',
+            );
         }
         return $clean;
     }
@@ -191,7 +198,7 @@ final class BMSM_QDFS_Plugin {
             }
         }
 
-        $settings = array(
+        update_option(self::OPTION_KEY, array(
             'enable_discounts' => isset($_POST['enable_discounts']) ? 'yes' : 'no',
             'tiers' => self::sanitize_tiers($tiers),
             'enable_offer_boxes' => isset($_POST['enable_offer_boxes']) ? 'yes' : 'no',
@@ -207,9 +214,8 @@ final class BMSM_QDFS_Plugin {
             'notice_unlocked' => isset($_POST['notice_unlocked']) ? sanitize_text_field(wp_unslash($_POST['notice_unlocked'])) : '',
             'notice_next_discount' => isset($_POST['notice_next_discount']) ? sanitize_text_field(wp_unslash($_POST['notice_next_discount'])) : '',
             'notice_next_free_shipping' => isset($_POST['notice_next_free_shipping']) ? sanitize_text_field(wp_unslash($_POST['notice_next_free_shipping'])) : '',
-        );
+        ));
 
-        update_option(self::OPTION_KEY, $settings);
         if (function_exists('WC')) {
             WC()->shipping()->reset_shipping();
         }
@@ -229,7 +235,7 @@ final class BMSM_QDFS_Plugin {
             <form method="post" action="">
                 <?php wp_nonce_field('bmsm_qdfs_save_settings_action', 'bmsm_qdfs_nonce'); ?>
                 <div class="bmsm-card"><h2><?php esc_html_e('Quantity Discount Tiers', 'bmsm-qdfs'); ?></h2><label class="bmsm-checkbox"><input type="checkbox" name="enable_discounts" value="yes" <?php checked($settings['enable_discounts'], 'yes'); ?>> <?php esc_html_e('Enable quantity discounts', 'bmsm-qdfs'); ?></label><table class="widefat striped bmsm-tiers-table" id="bmsm-tiers-table"><thead><tr><th><?php esc_html_e('Enabled', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Min Quantity', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Discount %', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Cart Label', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Action', 'bmsm-qdfs'); ?></th></tr></thead><tbody><?php foreach ($settings['tiers'] as $index => $tier) : $this->render_tier_row($index, $tier); endforeach; ?></tbody></table><p><button type="button" class="button button-secondary" id="bmsm-add-tier"><?php esc_html_e('+ Add Tier', 'bmsm-qdfs'); ?></button></p></div>
-                <div class="bmsm-card"><h2><?php esc_html_e('Frontend Offer Boxes', 'bmsm-qdfs'); ?></h2><label class="bmsm-checkbox"><input type="checkbox" name="enable_offer_boxes" value="yes" <?php checked($settings['enable_offer_boxes'], 'yes'); ?>> <?php esc_html_e('Show discount and coupon list boxes on product/cart/checkout pages', 'bmsm-qdfs'); ?></label><p><label><?php esc_html_e('Title:', 'bmsm-qdfs'); ?> <input type="text" name="offer_box_title" value="<?php echo esc_attr($settings['offer_box_title']); ?>" class="regular-text"></label></p><table class="widefat striped bmsm-offers-table" id="bmsm-offers-table"><thead><tr><th><?php esc_html_e('Enabled', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Code', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Description', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Icon', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Action', 'bmsm-qdfs'); ?></th></tr></thead><tbody><?php foreach ($settings['coupon_offers'] as $index => $offer) : $this->render_offer_row($index, $offer); endforeach; ?></tbody></table><p><button type="button" class="button button-secondary" id="bmsm-add-offer"><?php esc_html_e('+ Add Offer', 'bmsm-qdfs'); ?></button></p></div>
+                <div class="bmsm-card"><h2><?php esc_html_e('Frontend Offer Boxes', 'bmsm-qdfs'); ?></h2><label class="bmsm-checkbox"><input type="checkbox" name="enable_offer_boxes" value="yes" <?php checked($settings['enable_offer_boxes'], 'yes'); ?>> <?php esc_html_e('Show discount and coupon list box on single product pages', 'bmsm-qdfs'); ?></label><p><label><?php esc_html_e('Title:', 'bmsm-qdfs'); ?> <input type="text" name="offer_box_title" value="<?php echo esc_attr($settings['offer_box_title']); ?>" class="regular-text"></label></p><table class="widefat striped bmsm-offers-table" id="bmsm-offers-table"><thead><tr><th><?php esc_html_e('Enabled', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Code', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Description', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Icon', 'bmsm-qdfs'); ?></th><th><?php esc_html_e('Action', 'bmsm-qdfs'); ?></th></tr></thead><tbody><?php foreach ($settings['coupon_offers'] as $index => $offer) : $this->render_offer_row($index, $offer); endforeach; ?></tbody></table><p><button type="button" class="button button-secondary" id="bmsm-add-offer"><?php esc_html_e('+ Add Offer', 'bmsm-qdfs'); ?></button></p></div>
                 <div class="bmsm-card"><h2><?php esc_html_e('Free Shipping Rule', 'bmsm-qdfs'); ?></h2><table class="form-table" role="presentation"><tr><th scope="row"><?php esc_html_e('Enable Free Shipping', 'bmsm-qdfs'); ?></th><td><label><input type="checkbox" name="enable_free_shipping" value="yes" <?php checked($settings['enable_free_shipping'], 'yes'); ?>> <?php esc_html_e('Enable custom free shipping by quantity', 'bmsm-qdfs'); ?></label></td></tr><tr><th scope="row"><?php esc_html_e('Free Shipping Quantity', 'bmsm-qdfs'); ?></th><td><input type="number" min="1" name="free_shipping_qty" value="<?php echo esc_attr($settings['free_shipping_qty']); ?>" class="small-text"> <?php esc_html_e('items', 'bmsm-qdfs'); ?></td></tr><tr><th scope="row"><?php esc_html_e('Free Shipping Label', 'bmsm-qdfs'); ?></th><td><input type="text" name="free_shipping_label" value="<?php echo esc_attr($settings['free_shipping_label']); ?>" class="regular-text"></td></tr><tr><th scope="row"><?php esc_html_e('Keep Other Shipping Methods', 'bmsm-qdfs'); ?></th><td><label><input type="checkbox" name="keep_other_shipping_methods" value="yes" <?php checked($settings['keep_other_shipping_methods'], 'yes'); ?>> <?php esc_html_e('Keep paid shipping methods and add Free Shipping as an extra option.', 'bmsm-qdfs'); ?></label></td></tr><tr><th scope="row"><?php esc_html_e('Hide Existing Woo Free Shipping Until Eligible', 'bmsm-qdfs'); ?></th><td><label><input type="checkbox" name="hide_existing_free_shipping_until_eligible" value="yes" <?php checked($settings['hide_existing_free_shipping_until_eligible'], 'yes'); ?>> <?php esc_html_e('Hide WooCommerce Free Shipping methods until this rule is eligible.', 'bmsm-qdfs'); ?></label></td></tr><tr><th scope="row"><?php esc_html_e('Free Shipping Only Mode', 'bmsm-qdfs'); ?></th><td><label><input type="checkbox" name="free_shipping_only_mode" value="yes" <?php checked($settings['free_shipping_only_mode'], 'yes'); ?>> <?php esc_html_e('If free shipping is unlocked, do not apply percentage discount.', 'bmsm-qdfs'); ?></label></td></tr></table></div>
                 <div class="bmsm-card"><h2><?php esc_html_e('Cart / Checkout Notices', 'bmsm-qdfs'); ?></h2><table class="form-table" role="presentation"><tr><th scope="row"><?php esc_html_e('Enable Notices', 'bmsm-qdfs'); ?></th><td><label><input type="checkbox" name="enable_notices" value="yes" <?php checked($settings['enable_notices'], 'yes'); ?>> <?php esc_html_e('Show promotional notices on cart and checkout.', 'bmsm-qdfs'); ?></label></td></tr><tr><th scope="row"><?php esc_html_e('Unlocked Message', 'bmsm-qdfs'); ?></th><td><input type="text" name="notice_unlocked" value="<?php echo esc_attr($settings['notice_unlocked']); ?>" class="large-text"></td></tr><tr><th scope="row"><?php esc_html_e('Next Discount Message', 'bmsm-qdfs'); ?></th><td><input type="text" name="notice_next_discount" value="<?php echo esc_attr($settings['notice_next_discount']); ?>" class="large-text"><p class="description"><?php esc_html_e('Available placeholders: {items_needed}, {qty}, {discount}, {label}', 'bmsm-qdfs'); ?></p></td></tr><tr><th scope="row"><?php esc_html_e('Next Free Shipping Message', 'bmsm-qdfs'); ?></th><td><input type="text" name="notice_next_free_shipping" value="<?php echo esc_attr($settings['notice_next_free_shipping']); ?>" class="large-text"><p class="description"><?php esc_html_e('Available placeholders: {items_needed}, {qty}', 'bmsm-qdfs'); ?></p></td></tr></table></div>
                 <p class="submit"><button type="submit" name="bmsm_qdfs_save_settings" class="button button-primary"><?php esc_html_e('Save Changes', 'bmsm-qdfs'); ?></button></p>
@@ -283,6 +289,9 @@ final class BMSM_QDFS_Plugin {
     }
 
     public function render_offer_boxes() {
+        if (!is_product()) {
+            return;
+        }
         $settings = self::get_settings();
         if ($settings['enable_offer_boxes'] !== 'yes') {
             return;
@@ -471,6 +480,6 @@ add_action('plugins_loaded', function() {
 
 register_activation_hook(__FILE__, function() {
     if (!get_option(BMSM_QDFS_Plugin::OPTION_KEY)) {
-        update_option(BMSM_QDFS_Plugin::OPTION_KEY, BMSM_QDFS_Plugin::defaults());
+        update_option(BMSM_QDFS_Plugin::defaults());
     }
 });
