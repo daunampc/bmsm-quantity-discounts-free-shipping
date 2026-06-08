@@ -1,12 +1,3 @@
-document.addEventListener('DOMContentLoaded', function() {
-    var productCartForm = document.querySelector('form.cart');
-    var offerBox = document.querySelector('.single-product .bmsm-qdfs-offers');
-
-    if (productCartForm && offerBox) {
-        productCartForm.insertAdjacentElement('afterend', offerBox);
-    }
-});
-
 document.addEventListener('click', function(event) {
     var copyButton = event.target.closest('.bmsm-qdfs-copy');
     if (copyButton) {
